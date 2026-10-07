@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="SFM Tab Assist Logo" width="180"/>
+</p>
+
 # SFM Tab Assist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
