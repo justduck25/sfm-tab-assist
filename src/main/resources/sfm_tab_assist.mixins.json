@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.sfmaddon.tabassist.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "sfm_tab_assist.refmap.json",
+  "mixins": [
+    "MultiLineEditBoxAccessor"
+  ],
+  "client": [
+    "ManagerScreenMixin",
+    "SFMTextEditScreenV1Mixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
+
