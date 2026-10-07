@@ -38,7 +38,18 @@ Equipped with built-in machine heuristics and profile definitions for accurate i
   - When specifying a `SLOTS <id>`, redundant `SIDE` clauses are omitted to avoid invalid syntax errors (e.g. `slots 0` instead of `top side slots 0`).
   - Contextual chained routing: after an `INPUT` from a machine output slot, the subsequent `OUTPUT` automatically directs towards storage chests rather than pushing back into the machine.
 
-### 5. In-Editor GUI Toggle Button
+### 5. Semantic Label Resolver (Label Locator)
+- Brings the power of **"Go to Definition" (Ctrl + Click)** to SFM scripting!
+- Simply hold **`Ctrl` and click** on any label in your script (e.g. `iron_chest`, `"input_iron"`, `smelter`):
+  - **Multi-Criteria Semantic Scoring Engine**: Analyzes exact disk labels (100%), lexical block ID / name similarity (40%), inventory contents (35%), machine roles / recipe types (25%), and flow direction (10%).
+  - **In-World Visual X-Ray Outlines**: Highlights candidate blocks directly in the 3D world with color-coded bounding boxes and floating billboard tags:
+    - 🟢 **High Confidence ($\ge 80\%$)**: Bright Green
+    - 🟡 **Medium Confidence ($50\% - 79\%$)**: Gold / Yellow
+    - 🟠 **Low Confidence ($25\% - 49\%$)**: Orange
+  - Highlights multiple candidates simultaneously without taking control away from the player.
+  - Automatically fades out after 15 seconds.
+
+### 6. In-Editor GUI Toggle Button
 - An interactive `[Tab: ON]` / `[Tab: OFF]` button is integrated directly into the script editor screen (`SFMTextEditScreenV1`).
 - Positioned neatly in the top-right header area so it never overlaps existing action buttons.
 - Player preference is automatically persisted to client configuration (`config/sfm_tab_assist-client.toml`).
@@ -51,6 +62,7 @@ Equipped with built-in machine heuristics and profile definitions for accurate i
 |---|---|---|
 | **Accept Suggestion** | `TAB` | Inserts the active ghost text into the script editor |
 | **Dismiss Suggestion** | `ESC` | Clears the active ghost text |
+| **Locate Label in World** | `Ctrl + Click` on label | Resolves and highlights matching blocks in the 3D world |
 | **Toggle Tab Assist** | `[Tab: ON / OFF]` Button | Enables or disables autocomplete directly from the editor GUI |
 
 ---

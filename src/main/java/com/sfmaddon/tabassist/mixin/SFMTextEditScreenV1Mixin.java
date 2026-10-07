@@ -9,6 +9,9 @@ import com.sfmaddon.tabassist.context.ClientCableContextCache;
 import com.sfmaddon.tabassist.engine.Suggestion;
 import com.sfmaddon.tabassist.engine.SuggestionEngine;
 import com.sfmaddon.tabassist.network.SFMTabAssistPackets;
+import com.sfmaddon.tabassist.resolver.LabelResolverEngine;
+import com.sfmaddon.tabassist.resolver.ResolvedBlockCandidate;
+import com.sfmaddon.tabassist.resolver.WorldHighlightManager;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -17,8 +20,11 @@ import net.minecraft.client.gui.components.MultilineTextField;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -226,6 +232,14 @@ public abstract class SFMTextEditScreenV1Mixin extends Screen {
         } else {
             this.sfmTabAssist$currentSuggestion = null;
         }
+
+        // Render hint when Ctrl is held
+        if (net.minecraft.client.Minecraft.getInstance().hasControlDown()) {
+            Font font = this.font;
+            int hintX = this.width / 2 - 198;
+            int hintY = this.height / 2 - 110 - 16;
+            SFMFontUtils.draw(graphics, font, "§3[Ctrl + Click]: §bLocate label in world", hintX, hintY, 0xFF38BDF8, false);
+        }
     }
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
@@ -254,5 +268,133 @@ public abstract class SFMTextEditScreenV1Mixin extends Screen {
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
             this.sfmTabAssist$currentSuggestion = null;
         }
+    }
+
+    @Inject(method = "mouseClicked", at = @At("RETURN"), cancellable = true)
+    private void sfmTabAssist$onMouseClicked(
+            net.minecraft.client.input.MouseButtonEvent event,
+            boolean doubleClick,
+            CallbackInfoReturnable<Boolean> cir
+    ) {
+        if (event.button() != 0 || !event.hasControlDown()) {
+            return;
+        }
+
+        MultiLineEditBox textarea = sfmTabAssist$getTextarea();
+        if (textarea == null) return;
+
+        MultilineTextField textField = ((MultiLineEditBoxAccessor) textarea).sfmTabAssist$getTextField();
+        String content = textField.value();
+        int cursor = textField.cursor();
+        if (content == null || cursor < 0 || cursor > content.length()) return;
+
+        sfmTabAssist$TokenLocation loc = sfmTabAssist$findTokenAtCursor(content, cursor);
+        if (loc == null || loc.token.isEmpty() || sfmTabAssist$isKeyword(loc.token)) return;
+
+        java.util.List<ResolvedBlockCandidate> candidates = LabelResolverEngine.resolveCandidates(
+                loc.token,
+                loc.isInputFlow,
+                ClientCableContextCache.getCurrentContext()
+        );
+
+        LocalPlayer player = net.minecraft.client.Minecraft.getInstance().player;
+        if (!candidates.isEmpty()) {
+            WorldHighlightManager.setHighlights(loc.token, candidates, 300); // 15 seconds (300 ticks)
+
+            net.minecraft.client.Minecraft.getInstance().getSoundManager().play(
+                    SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.2F)
+            );
+
+            if (player != null) {
+                ResolvedBlockCandidate best = candidates.get(0);
+                player.sendOverlayMessage(
+                        Component.literal("§6[SFM Resolver] §fLocated §a" + candidates.size() + "§f candidate(s) for §e\"" + loc.token + "\"§f (Top: §a" + best.block().blockDisplayName() + " " + best.getPercentage() + "%§f)")
+                );
+            }
+        } else {
+            if (player != null) {
+                player.sendOverlayMessage(
+                        Component.literal("§6[SFM Resolver] §cNo matching blocks found for \"" + loc.token + "\"")
+                );
+            }
+        }
+    }
+
+    @Unique
+    private record sfmTabAssist$TokenLocation(String token, boolean isInputFlow) {}
+
+    @Unique
+    private static sfmTabAssist$TokenLocation sfmTabAssist$findTokenAtCursor(String content, int cursor) {
+        if (content.isEmpty()) return null;
+        cursor = Math.min(cursor, content.length());
+
+        int lineStart = content.lastIndexOf('\n', Math.max(0, cursor - 1));
+        lineStart = (lineStart == -1) ? 0 : lineStart + 1;
+        int lineEnd = content.indexOf('\n', cursor);
+        if (lineEnd == -1) lineEnd = content.length();
+
+        String line = content.substring(lineStart, lineEnd);
+        int offset = cursor - lineStart;
+        if (line.trim().isEmpty() || offset < 0 || offset > line.length()) return null;
+
+        String upperLine = line.toUpperCase(java.util.Locale.ROOT);
+        boolean isInputFlow = upperLine.contains("FROM") || (upperLine.contains("INPUT") && !upperLine.contains("TO"));
+
+        // 1. Quoted label: "..."
+        int firstQuote = -1;
+        for (int i = 0; i < line.length(); i++) {
+            if (line.charAt(i) == '"') {
+                if (firstQuote == -1) {
+                    firstQuote = i;
+                } else {
+                    int secondQuote = i;
+                    if (offset >= firstQuote && offset <= secondQuote + 1) {
+                        String quoted = line.substring(firstQuote + 1, secondQuote);
+                        return new sfmTabAssist$TokenLocation(quoted, isInputFlow);
+                    }
+                    firstQuote = -1;
+                }
+            }
+        }
+
+        // 2. Unquoted identifier
+        if (offset >= line.length() && offset > 0) {
+            offset = line.length() - 1;
+        }
+
+        if (offset < line.length() && !sfmTabAssist$isTokenChar(line.charAt(offset)) && offset > 0 && sfmTabAssist$isTokenChar(line.charAt(offset - 1))) {
+            offset = offset - 1;
+        }
+
+        if (offset >= line.length() || !sfmTabAssist$isTokenChar(line.charAt(offset))) {
+            return null;
+        }
+
+        int start = offset;
+        while (start > 0 && sfmTabAssist$isTokenChar(line.charAt(start - 1))) {
+            start--;
+        }
+        int end = offset;
+        while (end < line.length() && sfmTabAssist$isTokenChar(line.charAt(end))) {
+            end++;
+        }
+
+        String word = line.substring(start, end).trim();
+        return new sfmTabAssist$TokenLocation(word, isInputFlow);
+    }
+
+    @Unique
+    private static boolean sfmTabAssist$isTokenChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == ':' || c == '-';
+    }
+
+    @Unique
+    private static boolean sfmTabAssist$isKeyword(String word) {
+        String u = word.toUpperCase(java.util.Locale.ROOT);
+        return u.equals("INPUT") || u.equals("OUTPUT") || u.equals("FROM") || u.equals("TO")
+                || u.equals("EVERY") || u.equals("TICKS") || u.equals("DO") || u.equals("END")
+                || u.equals("FOR") || u.equals("EACH") || u.equals("IN") || u.equals("IF")
+                || u.equals("THEN") || u.equals("ELSE") || u.equals("SLOT") || u.equals("SLOTS")
+                || u.equals("SIDE") || u.equals("NAME") || u.equals("FORGET") || u.equals("NOT");
     }
 }

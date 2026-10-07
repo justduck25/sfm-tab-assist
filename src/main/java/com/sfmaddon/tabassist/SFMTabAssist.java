@@ -22,5 +22,12 @@ public class SFMTabAssist {
 
         // Register network payloads
         modEventBus.addListener(SFMTabAssistPackets::register);
+
+        // Register client in-world highlight renderer
+        if (net.neoforged.fml.loading.FMLEnvironment.getDist().isClient()) {
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                    com.sfmaddon.tabassist.resolver.WorldHighlightRenderer::onRenderLevelStage
+            );
+        }
     }
 }
