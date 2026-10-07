@@ -198,11 +198,17 @@ public class SuggestionEngine {
         }
         if (upperTrimmed.equals("ELSE IF")) {
             String cond = buildIfCondition(context, isUpperCase);
+            if (cond.isEmpty()) {
+                return Optional.empty();
+            }
             return Optional.of(Suggestion.append(prefix.endsWith(" ") ? cond : " " + cond));
         }
 
         if (upperTrimmed.equals("IF")) {
             String cond = buildIfCondition(context, isUpperCase);
+            if (cond.isEmpty()) {
+                return Optional.empty();
+            }
             return Optional.of(Suggestion.append(prefix.endsWith(" ") ? cond : " " + cond));
         }
 
@@ -277,11 +283,17 @@ public class SuggestionEngine {
             if (upperPrefix.contains("INPUT ") && !upperPrefix.contains(" FROM")) {
                 String inLabel = findFirstInputLabel(context);
                 String fromWord = isUpperCase ? " FROM " : " from ";
+                if (inLabel == null) {
+                    return Optional.of(Suggestion.append(rem + fromWord.trim() + " "));
+                }
                 return Optional.of(Suggestion.append(rem + fromWord + formatLabel(inLabel, false)));
             }
             if (upperPrefix.contains("OUTPUT ") && !upperPrefix.contains(" TO")) {
                 String destLabel = findDestinationLabel(context, prefix, blockCtx);
                 String toWord = isUpperCase ? " TO " : " to ";
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(rem + toWord.trim() + " "));
+                }
                 return Optional.of(Suggestion.append(rem + toWord + formatLabel(destLabel, false)));
             }
             return Optional.of(Suggestion.append(rem));
@@ -302,6 +314,9 @@ public class SuggestionEngine {
             String fromWord = isUpperCase ? " FROM " : " from ";
             String inLabel = findFirstInputLabel(context);
             if (upperPrefix.contains("INPUT ") && !upperPrefix.contains(" FROM")) {
+                if (inLabel == null) {
+                    return Optional.of(Suggestion.append(rem + fromWord.trim() + " "));
+                }
                 return Optional.of(Suggestion.append(rem + fromWord + formatLabel(inLabel, false)));
             }
             return Optional.of(Suggestion.append(rem));
@@ -315,20 +330,32 @@ public class SuggestionEngine {
             String rem = eachWord.substring(sub.length());
             if (upperPrefix.contains("FROM ")) {
                 String inLabel = findFirstInputLabel(context);
+                if (inLabel == null) {
+                    return Optional.of(Suggestion.append(rem + " "));
+                }
                 return Optional.of(Suggestion.append(rem + " " + formatLabel(inLabel, false)));
             }
             if (upperPrefix.contains("TO ")) {
                 String destLabel = findDestinationLabel(context, prefix, blockCtx);
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(rem + " "));
+                }
                 return Optional.of(Suggestion.append(rem + " " + formatLabel(destLabel, false)));
             }
             return Optional.of(Suggestion.append(rem + (isUpperCase ? " SIDE" : " side")));
         }
         if (upperPrefix.endsWith("FROM EACH ") || upperPrefix.endsWith("from each ")) {
             String inLabel = findFirstInputLabel(context);
+            if (inLabel == null) {
+                return Optional.empty();
+            }
             return Optional.of(Suggestion.append(formatLabel(inLabel, false)));
         }
         if (upperPrefix.endsWith("TO EACH ") || upperPrefix.endsWith("to each ")) {
             String destLabel = findDestinationLabel(context, prefix, blockCtx);
+            if (destLabel == null) {
+                return Optional.empty();
+            }
             return Optional.of(Suggestion.append(formatLabel(destLabel, false)));
         }
 
@@ -338,10 +365,16 @@ public class SuggestionEngine {
             if (upperPrefix.contains("OUTPUT ")) {
                 String toWord = isUpperCase ? "TO " : "to ";
                 String destLabel = findEnergyDestLabel(context, prefix, blockCtx);
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(rem + toWord));
+                }
                 return Optional.of(Suggestion.append(rem + toWord + formatLabel(destLabel, false)));
             }
             String fromWord = isUpperCase ? "FROM " : "from ";
             String inLabel = findEnergySourceLabel(context);
+            if (inLabel == null) {
+                return Optional.of(Suggestion.append(rem + fromWord));
+            }
             return Optional.of(Suggestion.append(rem + fromWord + formatLabel(inLabel, false)));
         }
         if (upperTrimmed.endsWith("FLUID") || upperTrimmed.endsWith("FLUID:") || upperTrimmed.endsWith("FLUID::")) {
@@ -352,13 +385,30 @@ public class SuggestionEngine {
             if (upperPrefix.contains("OUTPUT ")) {
                 String toWord = isUpperCase ? " TO " : " to ";
                 String destLabel = findFluidDestLabel(context, prefix, blockCtx);
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(colonPart + fluidId + toWord.trim() + " "));
+                }
                 return Optional.of(Suggestion.append(colonPart + fluidId + toWord + formatLabel(destLabel, false)));
+            }
+            if (inLabel == null) {
+                return Optional.of(Suggestion.append(colonPart + fluidId + fromWord.trim() + " "));
             }
             return Optional.of(Suggestion.append(colonPart + fluidId + fromWord + formatLabel(inLabel, false)));
         }
 
         // 12. Handle INPUT statement
-        // 12a. User typing INPUT prefix (I, IN, INP, INPU, INPUT)
+        // 12a. After "INPUT " with trailing space
+        if (upperPrefix.endsWith("INPUT ")) {
+            String fromWord = isUpperCase ? "FROM" : "from";
+            String inLabel = findFirstInputLabel(context);
+            if (inLabel != null) {
+                return Optional.of(Suggestion.append(fromWord + " " + formatLabel(inLabel, false)));
+            } else {
+                return Optional.of(Suggestion.append(fromWord + " "));
+            }
+        }
+
+        // 12b. User typing INPUT prefix (I, IN, INP, INPU, INPUT)
         if (upperTrimmed.equals("I") || upperTrimmed.equals("IN") || upperTrimmed.equals("INP") || upperTrimmed.equals("INPU") || upperTrimmed.equals("INPUT")) {
             String keyword = isUpperCase ? "INPUT" : "input";
             String fromWord = isUpperCase ? "FROM" : "from";
@@ -366,14 +416,11 @@ public class SuggestionEngine {
             String spacePrefix = keywordPart.isEmpty() ? " " : keywordPart + " ";
 
             String inLabel = findFirstInputLabel(context);
-            return Optional.of(Suggestion.append(spacePrefix + fromWord + " " + formatLabel(inLabel, false)));
-        }
-
-        // 12b. After "INPUT " with trailing space
-        if (upperPrefix.endsWith("INPUT ")) {
-            String fromWord = isUpperCase ? "FROM" : "from";
-            String inLabel = findFirstInputLabel(context);
-            return Optional.of(Suggestion.append(fromWord + " " + formatLabel(inLabel, false)));
+            if (inLabel != null) {
+                return Optional.of(Suggestion.append(spacePrefix + fromWord + " " + formatLabel(inLabel, false)));
+            } else {
+                return Optional.of(Suggestion.append(spacePrefix + fromWord + " "));
+            }
         }
 
         // 12c. Typing after INPUT (item name, count, or FROM)
@@ -384,7 +431,11 @@ public class SuggestionEngine {
             if (prefix.endsWith(" ") && afterInput.matches(".*\\d+$")) {
                 String fromWord = isUpperCase ? "FROM" : "from";
                 String inLabel = findFirstInputLabel(context);
-                return Optional.of(Suggestion.append(fromWord + " " + formatLabel(inLabel, false)));
+                if (inLabel != null) {
+                    return Optional.of(Suggestion.append(fromWord + " " + formatLabel(inLabel, false)));
+                } else {
+                    return Optional.of(Suggestion.append(fromWord + " "));
+                }
             }
 
             if (upperTrimmed.endsWith("F") || upperTrimmed.endsWith("FR") || upperTrimmed.endsWith("FRO")) {
@@ -393,7 +444,11 @@ public class SuggestionEngine {
                 String fromFull = isUpperCase ? "FROM" : "from";
                 String rem = fromFull.substring(sub.length());
                 String inLabel = findFirstInputLabel(context);
-                return Optional.of(Suggestion.append(rem + " " + formatLabel(inLabel, false)));
+                if (inLabel != null) {
+                    return Optional.of(Suggestion.append(rem + " " + formatLabel(inLabel, false)));
+                } else {
+                    return Optional.of(Suggestion.append(rem + " "));
+                }
             }
 
             if (context != null && !afterInput.isEmpty() && !afterInput.contains("\"")) {
@@ -412,7 +467,12 @@ public class SuggestionEngine {
         // 13. Completing FROM keyword
         if (upperTrimmed.endsWith("FROM")) {
             String inLabel = findFirstInputLabel(context);
-            return Optional.of(Suggestion.append(" " + formatLabel(inLabel, false)));
+            if (inLabel != null) {
+                return Optional.of(Suggestion.append(" " + formatLabel(inLabel, false)));
+            } else if (!prefix.endsWith(" ")) {
+                return Optional.of(Suggestion.append(" "));
+            }
+            return Optional.empty();
         }
 
         // 14. Completing label name after FROM
@@ -462,6 +522,9 @@ public class SuggestionEngine {
         if (upperPrefix.endsWith("OUTPUT ")) {
             String toWord = isUpperCase ? "TO" : "to";
             String destLabel = findDestinationLabel(context, prefix, blockCtx);
+            if (destLabel == null) {
+                return Optional.of(Suggestion.append(toWord + " "));
+            }
             ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
             String bestItem = findBestItemForDestination(context, destBlock, blockCtx);
             String itemPart = (bestItem != null) ? bestItem + " " : "";
@@ -481,6 +544,9 @@ public class SuggestionEngine {
                 String space = keywordPart.isEmpty() ? " " : keywordPart + " ";
 
                 String destLabel = findDestinationLabel(context, prefix, blockCtx);
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(space + toWord + " "));
+                }
                 ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
                 String bestItem = findBestItemForDestination(context, destBlock, blockCtx);
                 String itemPart = (bestItem != null) ? bestItem + " " : "";
@@ -498,6 +564,9 @@ public class SuggestionEngine {
             if (prefix.endsWith(" ") && afterOut.matches(".*\\d+$")) {
                 String toWord = isUpperCase ? "TO" : "to";
                 String destLabel = findDestinationLabel(context, prefix, blockCtx);
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(toWord + " "));
+                }
                 ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
                 String sideBonus = getSideForDestination(destBlock, null, isUpperCase);
                 return Optional.of(Suggestion.append(toWord + " " + formatLabel(destLabel, false) + sideBonus));
@@ -510,6 +579,9 @@ public class SuggestionEngine {
                             String remItem = getItemRemainder(item, afterOut);
                             String toWord = isUpperCase ? "TO" : "to";
                             String destLabel = findDestinationLabel(context, prefix, blockCtx);
+                            if (destLabel == null) {
+                                return Optional.of(Suggestion.append(remItem + " " + toWord + " "));
+                            }
                             ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
                             String sideBonus = getSideForDestination(destBlock, item, isUpperCase);
                             return Optional.of(Suggestion.append(remItem + " " + toWord + " " + formatLabel(destLabel, false) + sideBonus));
@@ -526,9 +598,12 @@ public class SuggestionEngine {
             if (!afterOut.isEmpty() && (isKnownItem(context, afterOut) || afterOut.matches("^[a-zA-Z0-9_:]+$"))) {
                 String toWord = isUpperCase ? "TO" : "to";
                 String destLabel = findDestinationLabel(context, prefix, blockCtx);
+                String space = prefix.endsWith(" ") ? "" : " ";
+                if (destLabel == null) {
+                    return Optional.of(Suggestion.append(space + toWord + " "));
+                }
                 ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
                 String sideBonus = getSideForDestination(destBlock, afterOut, isUpperCase);
-                String space = prefix.endsWith(" ") ? "" : " ";
                 return Optional.of(Suggestion.append(space + toWord + " " + formatLabel(destLabel, false) + sideBonus));
             }
         }
@@ -536,6 +611,9 @@ public class SuggestionEngine {
         // 17. After "TO " with trailing space
         if (upperPrefix.endsWith("TO ")) {
             String destLabel = findDestinationLabel(context, prefix, blockCtx);
+            if (destLabel == null) {
+                return Optional.empty();
+            }
             ConnectedBlockInfo destBlock = findBlockByLabelOrCandidate(context, destLabel);
             String itemUsed = extractItemFromOutput(prefix);
             if (itemUsed == null && blockCtx != null) {
@@ -709,6 +787,9 @@ public class SuggestionEngine {
 
     private static String buildIfCondition(@Nullable CableContextData context, boolean isUpperCase) {
         String inLabel = findFirstInputLabel(context);
+        if (inLabel == null) {
+            return "";
+        }
         ConnectedBlockInfo srcBlock = findBlockByLabelOrCandidate(context, inLabel);
         String hasWord = isUpperCase ? "HAS GT 0" : "has gt 0";
         String thenWord = isUpperCase ? "THEN" : "then";
@@ -869,7 +950,10 @@ public class SuggestionEngine {
         return "minecraft:lava";
     }
 
-    public static String formatLabel(String label, boolean forceQuotes) {
+    public static String formatLabel(@Nullable String label, boolean forceQuotes) {
+        if (label == null || label.isEmpty()) {
+            return "";
+        }
         if (forceQuotes) {
             return "\"" + label + "\"";
         }
@@ -1010,9 +1094,9 @@ public class SuggestionEngine {
         return "";
     }
 
-    private static String findFirstInputLabel(@Nullable CableContextData context) {
+    private static @Nullable String findFirstInputLabel(@Nullable CableContextData context) {
         if (context == null || context.connectedBlocks().isEmpty()) {
-            return "chest";
+            return null;
         }
         for (ConnectedBlockInfo b : context.connectedBlocks()) {
             if (!b.isMachine()) {
@@ -1022,13 +1106,13 @@ public class SuggestionEngine {
         return context.connectedBlocks().get(0).getPreferredLabel();
     }
 
-    private static String findDestinationLabel(
+    private static @Nullable String findDestinationLabel(
             @Nullable CableContextData context,
             String currentPrefix,
             @Nullable BlockContext blockCtx
     ) {
         if (context == null || context.connectedBlocks().isEmpty()) {
-            return "furnace";
+            return null;
         }
 
         String sourceLabel = extractLabelFromClause(currentPrefix, "FROM");
@@ -1050,7 +1134,7 @@ public class SuggestionEngine {
                     return b.getPreferredLabel();
                 }
             }
-            return "chest";
+            return context.connectedBlocks().get(0).getPreferredLabel();
         }
 
         for (ConnectedBlockInfo b : context.connectedBlocks()) {
@@ -1067,10 +1151,10 @@ public class SuggestionEngine {
             }
         }
 
-        return "furnace";
+        return context.connectedBlocks().get(0).getPreferredLabel();
     }
 
-    private static String findEnergySourceLabel(@Nullable CableContextData context) {
+    private static @Nullable String findEnergySourceLabel(@Nullable CableContextData context) {
         if (context != null) {
             for (ConnectedBlockInfo b : context.connectedBlocks()) {
                 if (b.hasEnergy() || b.getPreferredLabel().toLowerCase(Locale.ROOT).contains("generator")
@@ -1083,7 +1167,7 @@ public class SuggestionEngine {
         return findFirstInputLabel(context);
     }
 
-    private static String findEnergyDestLabel(@Nullable CableContextData context, String prefix, @Nullable BlockContext blockCtx) {
+    private static @Nullable String findEnergyDestLabel(@Nullable CableContextData context, String prefix, @Nullable BlockContext blockCtx) {
         if (context != null) {
             for (ConnectedBlockInfo b : context.connectedBlocks()) {
                 if (b.hasEnergy() && b.isMachine()) {
@@ -1099,7 +1183,7 @@ public class SuggestionEngine {
         return findDestinationLabel(context, prefix, blockCtx);
     }
 
-    private static String findFluidSourceLabel(@Nullable CableContextData context) {
+    private static @Nullable String findFluidSourceLabel(@Nullable CableContextData context) {
         if (context != null) {
             for (ConnectedBlockInfo b : context.connectedBlocks()) {
                 if (b.hasFluid() || !b.sampleFluidIds().isEmpty()
@@ -1111,7 +1195,7 @@ public class SuggestionEngine {
         return findFirstInputLabel(context);
     }
 
-    private static String findFluidDestLabel(@Nullable CableContextData context, String prefix, @Nullable BlockContext blockCtx) {
+    private static @Nullable String findFluidDestLabel(@Nullable CableContextData context, String prefix, @Nullable BlockContext blockCtx) {
         if (context != null) {
             for (ConnectedBlockInfo b : context.connectedBlocks()) {
                 if ((b.hasFluid() || b.isMachine()) && !b.sampleFluidIds().isEmpty()) {
@@ -1251,7 +1335,9 @@ public class SuggestionEngine {
     private static @Nullable ConnectedBlockInfo findBlockByLabelOrCandidate(@Nullable CableContextData context, String label) {
         if (context == null || label.isEmpty()) return null;
         for (ConnectedBlockInfo b : context.connectedBlocks()) {
-            if (b.getPreferredLabel().equalsIgnoreCase(label) || b.labels().contains(label)) {
+            if (b.getPreferredLabel().equalsIgnoreCase(label)
+                    || b.labels().contains(label)
+                    || b.blockDisplayName().replace(' ', '_').equalsIgnoreCase(label)) {
                 return b;
             }
         }

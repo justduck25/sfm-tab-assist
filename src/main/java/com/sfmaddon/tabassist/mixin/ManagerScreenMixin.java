@@ -20,6 +20,7 @@ public abstract class ManagerScreenMixin extends AbstractContainerScreen<Manager
     @Inject(method = "init", at = @At("RETURN"))
     private void sfmTabAssist$onInit(CallbackInfo ci) {
         if (this.menu != null && this.menu.MANAGER_POSITION != null) {
+            com.sfmaddon.tabassist.context.ClientCableContextCache.setActiveManagerPos(this.menu.MANAGER_POSITION);
             SFMTabAssistPackets.requestContext(this.menu.MANAGER_POSITION);
         }
     }

@@ -223,4 +223,46 @@ public class LabelResolverEngineTest {
         Assertions.assertEquals(nameMatch.pos(), chestCandidates.get(0).pos());
         Assertions.assertTrue(chestCandidates.get(0).confidence() > 0.70f);
     }
+
+    @Test
+    public void testDoubleChestResolvesCorrectly() {
+        ConnectedBlockInfo doubleChest = new ConnectedBlockInfo(
+                new BlockPos(100, 64, 20),
+                "minecraft:chest",
+                "Double Chest",
+                List.of(),
+                List.of("iron_ingot"),
+                List.of(),
+                List.of("ALL"),
+                false,
+                54,
+                false,
+                false
+        );
+        ConnectedBlockInfo singleChest = new ConnectedBlockInfo(
+                new BlockPos(110, 64, 20),
+                "minecraft:chest",
+                "Chest",
+                List.of(),
+                List.of("oak_log"),
+                List.of(),
+                List.of("ALL"),
+                false,
+                27,
+                false,
+                false
+        );
+
+        CableContextData context = new CableContextData(new BlockPos(0, 64, 0), List.of(doubleChest, singleChest));
+
+        List<ResolvedBlockCandidate> candidates = LabelResolverEngine.resolveCandidates(
+                "double_chest",
+                true,
+                context
+        );
+
+        Assertions.assertFalse(candidates.isEmpty());
+        Assertions.assertEquals(doubleChest.pos(), candidates.get(0).pos());
+        Assertions.assertTrue(candidates.get(0).confidence() >= 0.70f);
+    }
 }

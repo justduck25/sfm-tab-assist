@@ -23,6 +23,12 @@ import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -34,22 +40,17 @@ public class CableContextScanner {
             @Nullable BlockPos managerPos,
             @Nullable ServerPlayer player
     ) {
-        Optional<CableNetwork> optNet = Optional.empty();
-
-        if (managerPos != null && !managerPos.equals(BlockPos.ZERO)) {
-            optNet = CableNetworkManager.getOrRegisterNetworkFromCablePosition(level, managerPos);
-            // If pos is a connected block (e.g. chest), check adjacent sides for cables
-            if (optNet.isEmpty()) {
-                for (Direction dir : Direction.values()) {
-                    optNet = CableNetworkManager.getOrRegisterNetworkFromCablePosition(level, managerPos.relative(dir));
-                    if (optNet.isPresent()) break;
-                }
-            }
+        if (managerPos == null || managerPos.equals(BlockPos.ZERO)) {
+            return Optional.empty();
         }
 
-        // Fallback: If not found via managerPos, search cable networks within 16 blocks of player
-        if (optNet.isEmpty() && player != null) {
-            optNet = CableNetworkManager.getNetworksInRange(level, player.blockPosition(), 16).findFirst();
+        Optional<CableNetwork> optNet = CableNetworkManager.getOrRegisterNetworkFromCablePosition(level, managerPos);
+        // If pos is a connected block (e.g. chest), check adjacent sides for cables
+        if (optNet.isEmpty()) {
+            for (Direction dir : Direction.values()) {
+                optNet = CableNetworkManager.getOrRegisterNetworkFromCablePosition(level, managerPos.relative(dir));
+                if (optNet.isPresent()) break;
+            }
         }
 
         if (optNet.isEmpty()) {
@@ -57,29 +58,21 @@ public class CableContextScanner {
         }
 
         CableNetwork network = optNet.get();
-        BlockPos finalManagerPos = (managerPos != null && !managerPos.equals(BlockPos.ZERO))
-                ? managerPos
-                : network.getCablePositions().iterator().next().immutable();
+        BlockPos finalManagerPos = managerPos;
 
         // 1. Collect labels from disks of all Managers in network
         Map<String, BlockPosSet> labelMap = new HashMap<>();
+        if (level.getBlockEntity(managerPos) instanceof ManagerBlockEntity currentMgr) {
+            LabelPositionHolder holder = LabelPositionHolder.from(currentMgr.getDisk());
+            if (holder != null && holder.labels() != null) {
+                labelMap.putAll(holder.labels());
+            }
+        }
         for (BlockPos cPos : network.getCablePositions()) {
             if (level.getBlockEntity(cPos) instanceof ManagerBlockEntity manager) {
                 LabelPositionHolder holder = LabelPositionHolder.from(manager.getDisk());
                 if (holder != null && holder.labels() != null) {
                     labelMap.putAll(holder.labels());
-                }
-            }
-        }
-
-        // Fallback: Check labels from Disk held in player's hands
-        if (labelMap.isEmpty() && player != null) {
-            for (ItemStack held : List.of(player.getMainHandItem(), player.getOffhandItem())) {
-                if (held.getItem() instanceof DiskItem) {
-                    LabelPositionHolder holder = LabelPositionHolder.from(held);
-                    if (holder != null && holder.labels() != null) {
-                        labelMap.putAll(holder.labels());
-                    }
                 }
             }
         }
@@ -103,10 +96,40 @@ public class CableContextScanner {
                 String blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
                 String displayName = state.getBlock().getName().getString();
 
-                // Find labels pointing to this block
+                // Multi-block partner detection (e.g. Double Chest, Bed, Door)
+                BlockPos partnerPos = null;
+                if (state.getBlock() instanceof ChestBlock && state.hasProperty(ChestBlock.TYPE)
+                        && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+                    Direction chestDir = ChestBlock.getConnectedDirection(state);
+                    partnerPos = neighborPos.relative(chestDir);
+                    displayName = "Double " + displayName;
+                } else if (state.getBlock() instanceof BedBlock
+                        && state.hasProperty(BedBlock.PART)
+                        && state.hasProperty(BedBlock.FACING)) {
+                    BedPart part = state.getValue(BedBlock.PART);
+                    Direction facing = state.getValue(BedBlock.FACING);
+                    partnerPos = (part == BedPart.FOOT)
+                            ? neighborPos.relative(facing)
+                            : neighborPos.relative(facing.getOpposite());
+                } else if (state.getBlock() instanceof DoorBlock
+                        && state.hasProperty(DoorBlock.HALF)) {
+                    DoubleBlockHalf half = state.getValue(DoorBlock.HALF);
+                    partnerPos = (half == DoubleBlockHalf.LOWER)
+                            ? neighborPos.above()
+                            : neighborPos.below();
+                }
+
+                // If partner block was found, mark it in scannedPositions to avoid duplicate ConnectedBlockInfo entries
+                if (partnerPos != null) {
+                    scannedPositions.add(partnerPos);
+                }
+
+                // Find labels pointing to this block (and its partner if multi-block)
                 List<String> matchedLabels = new ArrayList<>();
                 for (Map.Entry<String, BlockPosSet> entry : labelMap.entrySet()) {
                     if (entry.getValue().contains(neighborPos)) {
+                        matchedLabels.add(entry.getKey());
+                    } else if (partnerPos != null && entry.getValue().contains(partnerPos)) {
                         matchedLabels.add(entry.getKey());
                     }
                 }
@@ -120,8 +143,16 @@ public class CableContextScanner {
 
                 int maxSlotsFound = 0;
 
-                // Fallback: Read vanilla Container directly
-                if (be instanceof Container container) {
+                // Fallback: Read vanilla Container directly (supports double chests with 54 slots)
+                Container container = null;
+                if (state.getBlock() instanceof ChestBlock chestBlock) {
+                    container = ChestBlock.getContainer(chestBlock, state, level, neighborPos, false);
+                }
+                if (container == null && be instanceof Container c) {
+                    container = c;
+                }
+
+                if (container != null) {
                     supportedSides.add("ALL");
                     int size = container.getContainerSize();
                     maxSlotsFound = Math.max(maxSlotsFound, size);

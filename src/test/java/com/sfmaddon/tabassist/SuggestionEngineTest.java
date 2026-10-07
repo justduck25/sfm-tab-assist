@@ -639,4 +639,46 @@ public class SuggestionEngineTest {
         Assertions.assertTrue(sugChained.isPresent());
         Assertions.assertEquals("glass to chest", sugChained.get().ghostText());
     }
+
+    @Test
+    public void testHandModeDoesNotSuggestFakeLabels() {
+        // When disk is in hand (context is null or empty)
+        // 1. "in" should suggest "put from " not "put from chest"
+        Optional<Suggestion> sugIn = SuggestionEngine.computeSuggestion("in", 2, 1, false, null);
+        Assertions.assertTrue(sugIn.isPresent());
+        Assertions.assertEquals("put from ", sugIn.get().ghostText());
+
+        // 2. "input " should suggest "from " not "from chest"
+        Optional<Suggestion> sugInput = SuggestionEngine.computeSuggestion("input ", 6, 1, false, null);
+        Assertions.assertTrue(sugInput.isPresent());
+        Assertions.assertEquals("from ", sugInput.get().ghostText());
+
+        // 3. "from " should NOT invent any fake labels
+        Optional<Suggestion> sugFrom = SuggestionEngine.computeSuggestion("input from ", 11, 1, false, null);
+        Assertions.assertTrue(sugFrom.isEmpty());
+
+        // 4. "out" should suggest "put to " not "put to chest"
+        Optional<Suggestion> sugOut = SuggestionEngine.computeSuggestion("out", 3, 1, false, null);
+        Assertions.assertTrue(sugOut.isPresent());
+        Assertions.assertEquals("put to ", sugOut.get().ghostText());
+
+        // 5. "output " should suggest "to " not "to chest"
+        Optional<Suggestion> sugOutput = SuggestionEngine.computeSuggestion("output ", 7, 1, false, null);
+        Assertions.assertTrue(sugOutput.isPresent());
+        Assertions.assertEquals("to ", sugOutput.get().ghostText());
+
+        // 6. "output item " should suggest "to " not "to chest"
+        Optional<Suggestion> sugOutputItem = SuggestionEngine.computeSuggestion("output diamond ", 15, 1, false, null);
+        Assertions.assertTrue(sugOutputItem.isPresent());
+        Assertions.assertEquals("to ", sugOutputItem.get().ghostText());
+
+        // 7. "to " should NOT invent any fake labels
+        Optional<Suggestion> sugTo = SuggestionEngine.computeSuggestion("output diamond to ", 18, 1, false, null);
+        Assertions.assertTrue(sugTo.isEmpty());
+
+        // 8. General SFM keywords like "every", "end", "slots" still complete normally
+        Optional<Suggestion> sugEvery = SuggestionEngine.computeSuggestion("every", 5, 0, false, null);
+        Assertions.assertTrue(sugEvery.isPresent());
+        Assertions.assertEquals(" 20 ticks do", sugEvery.get().ghostText());
+    }
 }
